@@ -10,6 +10,7 @@ uses
   System.Generics.Collections,
   System.SysUtils,
   System.Classes,
+  ProcessingThread,
   ThreadSafeQueueU;
 
 var
@@ -104,9 +105,6 @@ type
 
   end;
 
-  TAppenderQueue = class(TThreadSafeQueue<TLogItem>)
-  end;
-
   ILogWriter = interface
     ['{A717A040-4493-458F-91B2-6F6E2AFB496F}']
     procedure Debug(const aMessage: string; const aTag: string); overload;
@@ -139,62 +137,38 @@ type
 
   TLogAppenderList = TList<ILogAppender>;
 
-  TAppenderThread = class(TThread)
-  private
-    FLogAppender: ILogAppender;
-    FAppenderQueue: TAppenderQueue;
-    FFailing: Boolean;
-    procedure SetFailing(const Value: Boolean);
+  TAppenderThread = class(TProcessingQueueThread<TLogItem>)
   protected
-    procedure Execute; override;
-
     type
       TAppenderStatus = (BeforeSetup, Running, WaitAfterFail, ToRestart, BeforeTearDown);
+  private
+    FLogAppender: ILogAppender;
+    FStatus: TAppenderStatus;
+    FSetupFailCount: Integer;
+    function GetLogLevel: TLogType;
+  protected
+    procedure DoAfterExecute; override;
+    procedure DoBeforeExecute; override;
+    procedure DoOnNewItem(const AItem: TLogItem); override;
+    procedure Process(var ADoPause: Boolean); override;
   public
-    constructor Create(aLogAppender: ILogAppender; aAppenderQueue: TAppenderQueue);
-    property Failing: Boolean read FFailing write SetFailing;
+    constructor Create(ALogAppender: ILogAppender);
+    property LogLevel: TLogType read GetLogLevel;
   end;
 
-  TLoggerThread = class(TThread)
-  private type
-      TAppenderAdapter = class
-      private
-        FAppenderQueue: TAppenderQueue;
-        FAppenderThread: TAppenderThread;
-        FLogAppender: ILogAppender;
-        FFailsCount: Cardinal;
-      public
-        constructor Create(aAppender: ILogAppender); virtual;
-        destructor Destroy; override;
-        function EnqueueLog(const aLogItem: TLogItem): Boolean;
-        property Queue: TAppenderQueue read FAppenderQueue;
-        property FailsCount: Cardinal read FFailsCount;
-        function GetLogLevel: TLogType;
-      end;
-
-      TAppenderAdaptersList = class(TObjectList<TAppenderAdapter>)
-      public
-        constructor Create;
-      end;
-
+  TLoggerThread = class(TProcessingQueueThread<TLogItem>)
   private
-    FQueue: TThreadSafeQueue<TLogItem>;
-    FAppenders: TLogAppenderList;
     FEventsHandlers: TLoggerProEventsHandler;
-    FAppendersDecorators: TObjectList<TAppenderAdapter>;
-    function BuildAppendersDecorator: TAppenderAdaptersList;
+    FAppenderList: TObjectList<TAppenderThread>;
     procedure DoOnAppenderError(const FailAppenderClassName: string; const aFailedLogItem: TLogItem; const aReason: TLogErrorReason;
       var aAction: TLogErrorAction);
     procedure SetEventsHandlers(const Value: TLoggerProEventsHandler);
   protected
-    procedure Execute; override;
+    procedure DoOnNewItem(const AItem: TLogItem); override;
     procedure DoTerminate; override;
   public
     constructor Create(aAppenders: TLogAppenderList);
-    destructor Destroy; override;
-
     property EventsHandlers: TLoggerProEventsHandler read FEventsHandlers write SetEventsHandlers;
-    property LogWriterQueue: TThreadSafeQueue < TLogItem > read FQueue;
   end;
 
   TLoggerProInterfacedObject = class(TInterfacedObject)
@@ -390,9 +364,7 @@ end;
 
 destructor TLogWriter.Destroy;
 begin
-  FLoggerThread.Terminate;
-  FLoggerThread.WaitFor;
-  FLoggerThread.Free;
+  FLoggerThread.Stop;
   FLogAppenders.Free;
   inherited;
 end;
@@ -419,26 +391,16 @@ end;
 
 procedure TLogWriter.AddAppender(const aAppender: ILogAppender);
 begin
-  Self.FLoggerThread.FAppenders.Add(aAppender);
   Self.FLogAppenders.Add(aAppender);
-  Self.FLoggerThread.FAppendersDecorators.Add(TLoggerThread.TAppenderAdapter.Create(aAppender));
 end;
 
 procedure TLogWriter.DelAppender(const aAppender: ILogAppender);
 var
   i: Integer;
 begin
-  i := Self.FLoggerThread.FAppenders.IndexOf(aAppender);
-  if i >= 0 then
-    Self.FLoggerThread.FAppenders.Delete(i);
-
   i := Self.FLogAppenders.IndexOf(aAppender);
   if i >= 0 then
     Self.FLogAppenders.Delete(i);
-
-  for I := 0 to Self.FLoggerThread.FAppendersDecorators.Count - 1 do
-    if Self.FLoggerThread.FAppendersDecorators[i].FLogAppender = aAppender then
-      Self.FLoggerThread.FAppendersDecorators.Delete(i);
 end;
 
 function TLogWriter.GetAppendersClassNames: TArray<string>;
@@ -480,7 +442,7 @@ begin
   begin
     lLogItem := TLogItem.Create(aType, aMessage, aTag);
     try
-      if not FLoggerThread.LogWriterQueue.Enqueue(lLogItem) then
+      if not FLoggerThread.Enqueue(lLogItem) then
       begin
         raise ELoggerPro.Create
           ('Main logs queue is full. Hints: Are there appenders? Are these appenders fast enough considering the log item production?');
@@ -536,122 +498,6 @@ begin
   Create(aType, aMessage, aTag, now, TThread.CurrentThread.ThreadID);
 end;
 
-{ TLogger.TLoggerThread }
-
-constructor TLoggerThread.Create(aAppenders: TLogAppenderList);
-begin
-  FQueue := TThreadSafeQueue<TLogItem>.Create(DefaultLoggerProMainQueueSize, 500);
-  FAppenders := aAppenders;
-  inherited Create(true);
-  FreeOnTerminate := False;
-end;
-
-destructor TLoggerThread.Destroy;
-begin
-  FQueue.Free;
-  inherited;
-end;
-
-procedure TLoggerThread.DoOnAppenderError(const FailAppenderClassName: string; const aFailedLogItem: TLogItem;
-  const aReason: TLogErrorReason; var aAction: TLogErrorAction);
-begin
-  if Assigned(FEventsHandlers) and (Assigned(FEventsHandlers.OnAppenderError)) then
-  begin
-    FEventsHandlers.OnAppenderError(FailAppenderClassName, aFailedLogItem, aReason, aAction);
-  end;
-end;
-
-procedure TLoggerThread.DoTerminate;
-begin
-
-  inherited;
-end;
-
-procedure TLoggerThread.Execute;
-var
-  lQSize: UInt64;
-  lLogItem: TLogItem;
-  I: Integer;
-  lAction: TLogErrorAction;
-  lWaitResult: TWaitResult;
-begin
-  FAppendersDecorators := BuildAppendersDecorator;
-  try
-    while true do
-    begin
-      lWaitResult := FQueue.Dequeue(lQSize, lLogItem);
-      case lWaitResult of
-        wrSignaled:
-          begin
-            if lLogItem <> nil then
-            begin
-              try
-                for I := 0 to FAppendersDecorators.Count - 1 do
-                begin
-                  if lLogItem.LogType >= FAppendersDecorators[I].GetLogLevel then
-                  begin
-                    if not FAppendersDecorators[I].EnqueueLog(lLogItem) then
-                    begin
-                      lAction := TLogErrorAction.SkipNewest; // default
-                      DoOnAppenderError(TObject(FAppendersDecorators[I].FLogAppender).ClassName, lLogItem,
-                        TLogErrorReason.QueueFull, lAction);
-                      case lAction of
-                        TLogErrorAction.SkipNewest:
-                          begin
-                            // just skip the new message
-                          end;
-                        TLogErrorAction.DiscardOlder:
-                          begin
-                            // just remove the oldest log message
-                            FAppendersDecorators[I].Queue.Dequeue.Free;
-                          end;
-                      end;
-                    end;
-                  end;
-                end;
-              finally
-                lLogItem.Free;
-              end;
-            end;
-          end;
-        wrTimeout, wrAbandoned, wrError:
-          begin
-            if Terminated then
-              Break;
-          end;
-        wrIOCompletion:
-          begin
-            raise ELoggerPro.Create('Unhandled WaitResult: wrIOCompletition');
-          end;
-      end;
-
-    end;
-  finally
-    FAppendersDecorators.Free;
-  end;
-end;
-
-procedure TLoggerThread.SetEventsHandlers(const Value: TLoggerProEventsHandler);
-begin
-  FEventsHandlers := Value;
-end;
-
-function TLoggerThread.BuildAppendersDecorator: TAppenderAdaptersList;
-var
-  I: Integer;
-begin
-  Result := TAppenderAdaptersList.Create;
-  try
-    for I := 0 to FAppenders.Count - 1 do
-    begin
-      Result.Add(TAppenderAdapter.Create(FAppenders[I]));
-    end;
-  except
-    Result.Free;
-    raise;
-  end;
-end;
-
 constructor TLogItem.Create(const aType: TLogType; const aMessage, aTag: string; const aTimeStamp: TDateTime; const aThreadID: TThreadID);
 begin
   inherited Create;
@@ -676,46 +522,6 @@ begin
   else
     raise ELoggerPro.Create('Invalid LogType');
   end;
-end;
-
-{ TLoggerThread.TAppenderDecorator }
-
-constructor TLoggerThread.TAppenderAdapter.Create(aAppender: ILogAppender);
-begin
-  inherited Create;
-  FFailsCount := 0;
-  FLogAppender := aAppender;
-  FAppenderQueue := TAppenderQueue.Create(DefaultLoggerProAppenderQueueSize, 10);
-  FAppenderThread := TAppenderThread.Create(FLogAppender, FAppenderQueue);
-end;
-
-destructor TLoggerThread.TAppenderAdapter.Destroy;
-begin
-  FAppenderQueue.DoShutDown;
-  FAppenderThread.Terminate;
-  FAppenderThread.Free;
-  FAppenderQueue.Free;
-  inherited;
-end;
-
-function TLoggerThread.TAppenderAdapter.GetLogLevel: TLogType;
-begin
-  Result := FLogAppender.GetLogLevel;
-end;
-
-function TLoggerThread.TAppenderAdapter.EnqueueLog(const aLogItem: TLogItem): Boolean;
-var
-  lLogItem: TLogItem;
-begin
-  lLogItem := aLogItem.Clone;
-  Result := FAppenderQueue.Enqueue(lLogItem); // = TWaitResult.wrSignaled;
-  if not Result then
-  begin
-    lLogItem.Free;
-    FFailsCount := FFailsCount + 1
-  end
-  else
-    FFailsCount := 0;
 end;
 
 { TLoggerProAppenderBase }
@@ -753,132 +559,6 @@ begin
   // do nothing "smart" here... descendant must implement specific "restart" strategies
 end;
 
-{ TAppenderThread }
-
-constructor TAppenderThread.Create(aLogAppender: ILogAppender; aAppenderQueue: TAppenderQueue);
-begin
-  FLogAppender := aLogAppender;
-  FAppenderQueue := aAppenderQueue;
-  inherited Create(False);
-end;
-
-procedure TAppenderThread.Execute;
-var
-  lLogItem: TLogItem;
-  lRestarted: Boolean;
-  lStatus: TAppenderStatus;
-  lSetupFailCount: Integer;
-begin
-  lSetupFailCount := 0;
-  lStatus := TAppenderStatus.BeforeSetup;
-  try
-    { the appender tries to log all the messages before terminate... }
-    //dt
-    while (not Terminated) or (FAppenderQueue.QueueSize > 0) do
-    begin
-      { ...but if the thread should be terminated, and the appender is failing,
-        its messages will be lost }
-      if Terminated and (lStatus = TAppenderStatus.WaitAfterFail) then
-        Break;
-
-      try
-        { this state machine handles the status of the appender }
-        case lStatus of
-          TAppenderStatus.BeforeTearDown:
-            begin
-              Break;
-            end;
-
-          TAppenderStatus.BeforeSetup:
-            begin
-              try
-                FLogAppender.Setup;
-                lStatus := TAppenderStatus.Running;
-              except
-                if lSetupFailCount = 10 then
-                begin
-                  lStatus := TAppenderStatus.WaitAfterFail;
-                end
-                else
-                begin
-                  Inc(lSetupFailCount);
-                  Sleep(1000); // wait before next setup call
-                end;
-              end;
-            end;
-
-          TAppenderStatus.ToRestart:
-            begin
-              try
-                lRestarted := False;
-                FLogAppender.TryToRestart(lRestarted);
-                if lRestarted then
-                begin
-                  lStatus := TAppenderStatus.Running;
-                  FLogAppender.LastErrorTimeStamp := 0;
-                end
-                else
-                begin
-                  lRestarted := False;
-                  FLogAppender.LastErrorTimeStamp := now;
-                  lStatus := TAppenderStatus.WaitAfterFail;
-                end;
-              except
-                lRestarted := False;
-              end;
-              Failing := not lRestarted;
-            end;
-
-          TAppenderStatus.WaitAfterFail:
-            begin
-              Sleep(500);
-              if SecondsBetween(now, FLogAppender.LastErrorTimeStamp) >= 5 then
-                lStatus := TAppenderStatus.ToRestart;
-            end;
-
-          TAppenderStatus.Running:
-            begin
-              if FAppenderQueue.Dequeue(lLogItem) = TWaitResult.wrSignaled then
-              begin
-                if lLogItem <> nil then
-                begin
-                  try
-                    try
-                      FLogAppender.WriteLog(lLogItem);
-                    except
-                      Failing := true;
-                      FLogAppender.LastErrorTimeStamp := now;
-                      lStatus := TAppenderStatus.WaitAfterFail;
-                      Continue;
-                    end;
-                  finally
-                    lLogItem.Free;
-                  end;
-                end;
-              end;
-            end;
-        end;
-      except
-        // something wrong... but we cannot stop the thread. Let's retry.
-      end;
-    end;
-  finally
-    FLogAppender.TearDown;
-  end;
-end;
-
-procedure TAppenderThread.SetFailing(const Value: Boolean);
-begin
-  FFailing := Value;
-end;
-
-{ TLoggerThread.TAppenderAdaptersList }
-
-constructor TLoggerThread.TAppenderAdaptersList.Create;
-begin
-  inherited Create(true);
-end;
-
 { TLoggerProInterfacedObject }
 
 function TLoggerProInterfacedObject._AddRef: Integer;
@@ -889,6 +569,184 @@ end;
 function TLoggerProInterfacedObject._Release: Integer;
 begin
   Result := inherited;
+end;
+
+{ TLoggerThread }
+
+constructor TLoggerThread.Create(aAppenders: TLogAppenderList);
+var
+  LLogAppender: ILogAppender;
+begin
+  inherited Create(True, DefaultLoggerProMainQueueSize);
+
+  // build appender decorators list
+  FAppenderList := TObjectList<TAppenderThread>.Create(False);
+  try
+    for LLogAppender in aAppenders do
+      FAppenderList.Add(TAppenderThread.Create(LLogAppender));
+  except
+    FAppenderList.Free;
+    raise;
+  end;
+end;
+
+procedure TLoggerThread.DoOnAppenderError(const FailAppenderClassName: string;
+  const aFailedLogItem: TLogItem; const aReason: TLogErrorReason;
+  var aAction: TLogErrorAction);
+begin
+  if Assigned(FEventsHandlers) and (Assigned(FEventsHandlers.OnAppenderError)) then
+    FEventsHandlers.OnAppenderError(FailAppenderClassName, aFailedLogItem, aReason, aAction);
+end;
+
+procedure TLoggerThread.DoOnNewItem(const AItem: TLogItem);
+var
+  LAction: TLogErrorAction;
+  LAppender: TAppenderThread;
+begin
+  for LAppender in FAppenderList do
+  begin
+    if AItem.LogType >= LAppender.GetLogLevel then
+    begin
+      if not LAppender.Enqueue(AItem.Clone) then
+      begin
+        LAction := TLogErrorAction.SkipNewest; // default
+        DoOnAppenderError(TObject(LAppender.FLogAppender).ClassName, AItem,
+          TLogErrorReason.QueueFull, LAction);
+        case lAction of
+          TLogErrorAction.SkipNewest:
+            begin
+              // just skip the new message
+            end;
+          TLogErrorAction.DiscardOlder:
+            begin
+              // just ignore this item
+            end;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TLoggerThread.DoTerminate;
+var
+  LAppender: TAppenderThread;
+begin
+  // stop the appenders threads
+  for LAppender in FAppenderList do
+    LAppender.Stop;
+
+  FAppenderList.Free;
+  inherited;
+end;
+
+procedure TLoggerThread.SetEventsHandlers(const Value: TLoggerProEventsHandler);
+begin
+  FEventsHandlers := Value;
+end;
+
+{ TAppenderThread }
+
+constructor TAppenderThread.Create(ALogAppender: ILogAppender);
+begin
+  inherited Create(False, DefaultLoggerProAppenderQueueSize);
+  FLogAppender := ALogAppender;
+end;
+
+procedure TAppenderThread.DoAfterExecute;
+begin
+  FLogAppender.TearDown;
+end;
+
+procedure TAppenderThread.DoBeforeExecute;
+begin
+  FSetupFailCount := 0;
+  FStatus := TAppenderStatus.BeforeSetup;
+end;
+
+procedure TAppenderThread.DoOnNewItem(const AItem: TLogItem);
+begin
+  try
+    FLogAppender.WriteLog(AItem);
+  except
+    FLogAppender.LastErrorTimeStamp := Now;
+    FStatus := TAppenderStatus.WaitAfterFail;
+  end;
+end;
+
+function TAppenderThread.GetLogLevel: TLogType;
+begin
+  Result := FLogAppender.GetLogLevel;
+end;
+
+procedure TAppenderThread.Process(var ADoPause: Boolean);
+var
+  LRestarted: Boolean;
+begin
+  try
+    // run the state machine
+    ADoPause := False;
+
+    // this state machine handles the status of the appender
+    case FStatus of
+      TAppenderStatus.BeforeSetup:
+        begin
+          try
+            FLogAppender.Setup;
+            FStatus := TAppenderStatus.Running;
+          except
+            if FSetupFailCount >= 10 then
+            begin
+              FStatus := TAppenderStatus.WaitAfterFail;
+            end
+            else
+            begin
+              Inc(FSetupFailCount);
+              Sleep(1000); // wait before next setup call
+            end;
+          end;
+        end;
+
+      TAppenderStatus.ToRestart:
+        begin
+          try
+            LRestarted := False;
+            FLogAppender.TryToRestart(LRestarted);
+            if LRestarted then
+            begin
+              FStatus := TAppenderStatus.Running;
+              FLogAppender.LastErrorTimeStamp := 0;
+            end
+            else
+            begin
+              LRestarted := False;
+              FLogAppender.LastErrorTimeStamp := Now;
+              FStatus := TAppenderStatus.WaitAfterFail;
+            end;
+          except
+            LRestarted := False;
+          end;
+          // Failing := not lRestarted;
+        end;
+
+      TAppenderStatus.WaitAfterFail:
+        begin
+          Sleep(500);
+          if SecondsBetween(Now, FLogAppender.LastErrorTimeStamp) >= 5 then
+            FStatus := TAppenderStatus.ToRestart;
+        end;
+
+      TAppenderStatus.Running:
+        begin
+          // dequeue the next item(s), it will trigger DoOnNewItem()
+          inherited;
+
+          // pause if successfully dequeued and processed
+          ADoPause := FStatus = TAppenderStatus.Running;
+        end;
+    end;
+  except
+    // something wrong... but we cannot stop the thread. Let's retry.
+  end;
 end;
 
 end.
