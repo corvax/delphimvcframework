@@ -123,6 +123,25 @@ type
   end;
 
   /// <summary>
+  /// Specify swagger response headers.
+  /// </summary>
+  MVCSwagResponseHeadersAttribute = class(TCustomAttribute)
+  private
+    FName: string;
+    FDescription: string;
+    FValueType: string;
+    FStatusCode: Integer;
+    //FValueFormat: string;
+  public
+    constructor Create(const AStatusCode: Integer; const AName, ADescription, AValueType: string); overload;
+
+    property StatusCode: Integer read FStatusCode;
+    property Name: string read FName;
+    property Description: string read FDescription;
+    property ValueType: string read FValueType;
+  end;
+
+  /// <summary>
   /// Specify swagger path params.
   /// </summary>
   MVCSwagParamAttribute = class(TCustomAttribute)
@@ -324,6 +343,7 @@ uses
   MVCFramework.Serializer.Abstract,
   MVCFramework.Serializer.Commons,
   Swag.Doc.Path.Operation.Response,
+  Swag.Doc.Path.Operation.ResponseHeaders,
   Json.Schema.Field.Numbers,
   Json.Schema.Field.Strings,
   Json.Schema.Field.Arrays,
@@ -629,6 +649,9 @@ var
   lIndex: Integer;
   lJsonSchema: TJsonFieldArray;
   lModelClass: TClass;
+  LAttrInner: TCustomAttribute;
+  LSwagResponseHeadersAttr: MVCSwagResponseHeadersAttribute;
+  LSwagResponseHeaders: TSwagHeaders;
 begin
   for lAttr in aMethod.GetAttributes do
   begin
@@ -683,6 +706,25 @@ begin
       lSwagResponse := TSwagResponse.Create;
       lSwagResponse.StatusCode := lSwagResponsesAttr.StatusCode.ToString;
       lSwagResponse.Description := lSwagResponsesAttr.Description;
+
+      // find the response headers for the current status code
+      for LAttrInner in aMethod.GetAttributes do
+      begin
+        if LAttrInner is MVCSwagResponseHeadersAttribute then
+        begin
+          LSwagResponseHeadersAttr := MVCSwagResponseHeadersAttribute(LAttrInner);
+          if LSwagResponseHeadersAttr.StatusCode = lSwagResponsesAttr.StatusCode then
+          begin
+            LSwagResponseHeaders := TSwagHeaders.Create;
+            LSwagResponseHeaders.Name := LSwagResponseHeadersAttr.Name;
+            LSwagResponseHeaders.Description := LSwagResponseHeadersAttr.Description;
+            LSwagResponseHeaders.ValueType := LSwagResponseHeadersAttr.ValueType;
+            //LSwagHeaders.Format := 'date-time';
+            lSwagResponse.Headers.Add(LSwagResponseHeaders);
+          end;
+        end;
+      end;
+
       if not lSwagResponsesAttr.JsonSchema.IsEmpty then
       begin
         lSwagResponse.Schema.JsonSchema := TJSONObject.ParseJSONValue(lSwagResponsesAttr.JsonSchema) as TJSONObject
@@ -1379,5 +1421,15 @@ begin
   Result := fDefaultTags.Split([',']);
 end;
 
+{ MVCSwagResponseHeadersAttribute }
+
+constructor MVCSwagResponseHeadersAttribute.Create(const AStatusCode: Integer;
+  const AName, ADescription, AValueType: string);
+begin
+  FStatusCode := AStatusCode;
+  FName := AName;
+  FDescription := ADescription;
+  FValueType := AValueType;
+end;
 
 end.
