@@ -164,31 +164,20 @@ While DMVCFramework is born from the head of Daniele Teti from bit Time Professi
 
 **GOLD SPONSORS**
 
-![](https://github.com/danieleteti/delphimvcframework/raw/master/docs/sponsorlogos/bittimeprofessionals.png)
-
-[bit Time Professionals ](https://www.bittimeprofessionals.com)
-
-
-
-![](https://github.com/danieleteti/delphimvcframework/raw/master/docs/sponsorlogos/bittimesoftware.png)
-
-[bit Time Software](https://www.bittime.it)
+|COMPANY NAME | LOGO|
+|-----------------------------------------------------------------------|------------------------------------------------------------------------|
+|[bit Time Professionals ](https://www.bittimeprofessionals.com)		|![](docs/sponsorlogos/bittimeprofessionals.png)  |
+|[bit Time Software](https://www.bittime.it)                            |![](docs/sponsorlogos/bittimesoftware.png)       |
 
 
 
 **SILVER SPONSOR**
 
-![](https://github.com/danieleteti/delphimvcframework/raw/master/docs/sponsorlogos/centrosoftware.png)
-
-[Centro Software](https://www.centrosoftware.com)
-
-
-
-![](https://github.com/danieleteti/delphimvcframework/raw/master/docs/sponsorlogos/delphistudio.png)
-
-[Delphi Studio ES](http://www.delphistudio.es)
-
-
+|COMPANY NAME | LOGO|
+|-----------------------------------------------------------------------|------------------------------------------------------------------------|
+|[Centro Software](https://www.centrosoftware.com)                      | ![](docs/sponsorlogos/centrosoftware.png) |
+|[Delphi Studio ES](http://www.delphistudio.es)                         | ![](docs/sponsorlogos/delphistudio.png)   |
+|[Orion Law](https://orionlaw.com/)                                     | ![](docs/sponsorlogos/orionlaw.png)       |
 
 
 
@@ -473,11 +462,11 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 
 ### What's new in 3.2.2-nitrogen (currently in beta)
 
-- ⚡New! Support for Delphi 11 Alexandria
+- ⚡New! Support for Delphi 11.1 Alexandria
 
 - ⚡New `TMVCRESTClient` implementation based on *Net components, the previous one was based on INDY Components (thanks to [João Antônio Duarte](https://github.com/joaoduarte19)).
 
-- ⚡New! `MVCJSONRPCAllowGET` attribute allows a remote JSON-RPC published object, or a specific method, to be called using GET HTTP Verb as well as POST HTTP Verb. POST is always available, GET is available only if explicitly allowed. `IMVCJSONRPCExecutor` allows to specify which HTTP Verb to use when call the server JSON.RPC methods. The default verb can be injected in the constructor and each `ExecuteRequest`/`ExecuteNotification` allows to override od adhere to the instance default.
+- ⚡New! `MVCJSONRPCAllowGET` attribute allows a remote JSON-RPC published object, or a specific method, to be called using GET HTTP Verb as well as POST HTTP Verb. POST is always available, GET is available only if explicitly allowed. `IMVCJSONRPCExecutor` allows to specify which HTTP Verb to use when call the server JSON-RPC methods. The default verb can be injected in the constructor and each `ExecuteRequest`/`ExecuteNotification` allows to override od adhere to the instance default.
 
 - ⚡New! eLua server side view support added! The View engine requires Lua's dlls so it is not included in the main package but in a sampl project. Check `serversideviews_lua` sample. 
 
@@ -496,6 +485,8 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 - ⚡New `OnContextCreate` and `OnContextDetroyed` events for `TMVCEngine`. 
 
 - ⚡New! Added parameter `RootNode` in `BodyFor`<T> and `BodyForListOf<T>` methods, just like the `BodyAs*` methods.
+
+- ⚡New! Added `NullableTGUID` in `MVCFramework.Nullables.pas`.
 
 - ⚡New `property CustomIntfObject: IInterface` in `TWebContext`. This property can be used to inject custom services factory. 
 
@@ -533,7 +524,11 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 
 - ✅ Improved! PostgreSQL, FirebirdSQL, Interbase and SQLite now support tablename and fields with spaces.
 
+- ✅ Improved Nullable Types. Now it's possible to assign `nil` to a nullable type and to check its state using the new property `IsNull` which is the negation of the already available property `HasValue`.
+
 - ✅ Improved! Now `TMVCStaticFileMiddleware` is able to manage high-level criteria to show/hide/mask specific files in the documetn web root. Check [Issue 548](https://github.com/danieleteti/delphimvcframework/issues/548) and the updated sample `samples\middleware_staticfiles\` for more info.
+
+- ✅ Improved! In case of multiple MVCPath, Swagger consider only the first one (Thanks to V. Ferri and our sponsors)
 
 - ⚡New! Mechanism to customize the JWT claims setup using the client request as suggested in [issue495](https://github.com/danieleteti/delphimvcframework/issues/495)
 
@@ -544,6 +539,8 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 - ⚡ New! Serialization and Deserialization for Pascal `set` (Thanks to [rshuck](https://github.com/rshuck) for his suggestions)
 
 - ⚡ New! Added partitioning for `TMVCActiveRecord descendants` (more info ASAP)
+
+- ✅ Dramatically improved all "JSON-To-DataSet" operations (1 order of magnitude c.a.). Thanks to [MPannier](https://github.com/MPannier) and [David Moorhouse](https://github.com/fastbike) for their detailed analysis - More info [here](https://github.com/danieleteti/delphimvcframework/issues/553).
 
 - ✅ Improved! After a big refactoring (*"I love to delete code" -- cit. Daniele Teti*), support a new SQLGenerator is just 2 (two) methods away! Just as example, this is the current version of `TMVCSQLGeneratorPostgreSQL`
 
@@ -578,6 +575,8 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 
 - ✅ Improved error handling for JSON-RPC APIs (Thanks to [David Moorhouse](https://github.com/fastbike)). More info [here](https://github.com/danieleteti/delphimvcframework/issues/538).
 
+- ✅ Improved parameter handling for enum and set in JSON-RPC APIs.
+
 - ⚡ New! Added `ActiveRecordConnectionRegistry.AddDefaultConnection(const aConnetionDefName: String)`. The connection definition **must** be known by FireDAC. This method simplifies the most common scenario shown below.
 
     ```delphi
@@ -590,6 +589,8 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
     ```
 
 - ⚡ New! Added `ToJSONObject` and `ToJSONArray` to the `IMVCRESTResponse`. These methods automatically parse the response body and return a `TJSONObject` or a `TJSONArray` respectively. These methods work as a factory -  the client code need to handle returned istances. Is the body is not compatible with the request (a.k.a. is not a JSONObject in case of `ToJSONObject`, or is not a JSONArray in case of `ToJSONArray`) an exception is raised.
+
+- ⚡ New! Added support for primary GUID (UUID) primary keys, attributes and serialization (More info at [issue 552](https://github.com/danieleteti/delphimvcframework/issues/552)). Thanks to [Marcelo Jaloto](https://github.com/marcelojaloto) for its important collaboration.
 
 - ⚡ New! Added `TMVCJWTBlackListMiddleware` to allow black-listing and (a sort of) logout for a JWT based authentication. This middleware **must** be registered **after** the `TMVCJWTAuthenticationMiddleware`. 
 
@@ -681,6 +682,11 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
       //If the cookie doesn't exist (or cannot be deserialized) an exception is raised.
     end;
     ```
+	
+- ✅ Improved! While not strictly required nor defined, DMVCFramework supports sending body data for all HTTP VERBS - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET	
+
+- ⚡ New! Automated support to avoid "mid-air collisions". New methods `SetETag` and `CheckIfMatch` allows a better security without adding complexity to the controller code - check `avoid_mid_air_collisions_sample.dproj` sample and see  https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag#avoiding_mid-air_collisions for more info about mid-air collisions.
+
 
 ### Bug Fixes in 3.2.2-nitrogen
 
@@ -704,6 +710,16 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 
 - Fix https://github.com/danieleteti/delphimvcframework/issues/539
 
+- Fix https://github.com/danieleteti/delphimvcframework/issues/560 (thanks to [David Moorhouse](https://github.com/fastbike))
+
+- Fix https://github.com/danieleteti/delphimvcframework/issues/335 (thanks to [João Antônio Duarte](https://github.com/joaoduarte19))
+
+- Fix https://github.com/danieleteti/delphimvcframework/issues/564
+
+- Fix https://github.com/danieleteti/delphimvcframework/issues/570 (Thanks [Marcos Nielsen](https://github.com/marcosnielsen)) 
+
+- Fix https://github.com/danieleteti/delphimvcframework/issues/565
+
 - Merged [PR#543](https://github.com/danieleteti/delphimvcframework/pull/543) (Now the `PathInfo` is trimmed so the router convert this "http://myserver.com/one " to this "http://myserver.com/one")
 
 - Fix for nil objects in lists during serialization
@@ -723,6 +739,8 @@ The current beta release is named 3.2.2-nitrogen. If you want to stay on the-edg
 - Fix https://github.com/danieleteti/delphimvcframework/issues/544 (Thanks to [David Moorhouse](https://github.com/fastbike))
 
 - Fix https://github.com/danieleteti/delphimvcframework/issues/542 (Thanks to [Lamberto Lodi](https://github.com/llodi-csw) for the hints)
+
+- Fix https://github.com/danieleteti/delphimvcframework/issues/485
 
 - Fixed *fileupload* sample
 

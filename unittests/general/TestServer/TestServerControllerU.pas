@@ -150,6 +150,10 @@ type
     [MVCProduces('application/json')]
     procedure TestCustomerEchoBodyFor;
 
+    [MVCPath('/echowithallverbs')]
+    [MVCHTTPMethod([httpGET, httpPOST, httpPUT, httpDELETE, httpPATCH, httpTRACE])]
+    [MVCProduces('application/json')]
+    procedure TestWithAllVerbs;
 
     [MVCPath('/speed')]
     [MVCHTTPMethod([httpGET])]
@@ -273,6 +277,14 @@ type
     [MVCHTTPMethod([httpGET])]
     [MVCPath('/issue542/($stringvalue)')]
     procedure GetIssue542;
+
+    [MVCHTTPMethod([httpGET])]
+    [MVCPath('/issue552')]
+    procedure TestIssue552GUIDSupport;
+
+    [MVCHTTPMethod([httpPOST])]
+    [MVCPath('/guidserializationecho')]
+    procedure TestGUIDSerializationEcho;
 
     { injectable parameters }
     [MVCHTTPMethod([httpGET])]
@@ -824,6 +836,18 @@ begin
   end;
 end;
 
+procedure TTestServerController.TestGUIDSerializationEcho;
+var
+  lEnt: TEntityWithGUIDs;
+begin
+  lEnt := Context.Request.BodyAs<TEntityWithGUIDs>;
+  try
+    Render(lEnt, False);
+  finally
+    lEnt.Free;
+  end;
+end;
+
 procedure TTestServerController.TestHelloWorld;
 begin
   ContentType := 'text/plain';
@@ -858,6 +882,17 @@ begin
   finally
     lJSON.Free;
   end;
+end;
+
+procedure TTestServerController.TestIssue552GUIDSupport;
+var
+  lObj: TEntityWithGUIDs;
+begin
+  lObj := TEntityWithGUIDs.Create(False);
+  lObj.GUID := StringToGUID('{75ADE43E-F8C1-4F66-B714-D04726FD2C21}');
+  lObj.NullableGUID := StringToGUID('{7B17F2DD-6ED5-40A4-A334-8ED877A6803E}');
+  lObj.NullableGUID2.Clear;
+  Render(lObj);
 end;
 
 procedure TTestServerController.TestJSONArrayAsObjectList;
@@ -1048,6 +1083,15 @@ procedure TTestServerController.TestTypedActionTTime1(value: TTime);
 begin
   ContentType := TMVCMediaType.TEXT_PLAIN;
   Render(TimeToISOTime(value) + ' modified from server');
+end;
+
+procedure TTestServerController.TestWithAllVerbs;
+var
+  lPerson: TPerson;
+begin
+  lPerson := Context.Request.BodyAs<TPerson>();
+  // lCustomer.Logo.SaveToFile('pippo_server_before.bmp');
+  Render(lPerson, True);
 end;
 
 procedure TTestServerController.Tmpl_ListOfDataUsingDatasets;

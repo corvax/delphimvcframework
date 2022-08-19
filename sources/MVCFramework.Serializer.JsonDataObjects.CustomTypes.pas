@@ -38,7 +38,8 @@ uses
   MVCFramework.Serializer.Intf,
   MVCFramework.Serializer.Commons,
   JsonDataObjects,
-  MVCFramework.Commons, MVCFramework.Serializer.JsonDataObjects;
+  MVCFramework.Commons,
+  MVCFramework.Serializer.JsonDataObjects;
 
 type
 
@@ -54,9 +55,6 @@ type
 
     procedure DeserializeRoot(const ASerializerObject: TObject; const AObject: TObject;
       const AAttributes: TArray<TCustomAttribute>);
-
-  public
-    { public declarations }
   end;
 
   TMVCStringDictionarySerializer = class(TInterfacedObject, IMVCTypeSerializer)
@@ -98,8 +96,6 @@ type
       const ASerializerObject: TObject; const AAttributes: TArray<TCustomAttribute>);
     procedure DeserializeRoot(const ASerializerObject: TObject; const AObject: TObject;
       const AAttributes: TArray<TCustomAttribute>);
-    // internal use
-    // class procedure Serialize(const ADict: TMVCStringDictionary; const AJSONObject: TJsonObject); inline;
   end;
 
   TMVCListOfStringSerializer = class(TInterfacedObject, IMVCTypeSerializer)
@@ -345,7 +341,7 @@ begin
   if lJSON.Values[APropertyName].Typ in [jdtNone, jdtObject] then { json nulls are recognized as jdtObject }
     LGuid := TGUID.Empty
   else
-    LGuid := TMVCGuidHelper.GuidFromString(lJSON.S[APropertyName]);
+    LGuid := TMVCGuidHelper.StringToGUIDEx(lJSON.S[APropertyName]);
   AElementValue := TValue.From<TGUID>(LGuid);
 end;
 
@@ -357,8 +353,14 @@ end;
 
 procedure TMVCGUIDSerializer.SerializeAttribute(const AElementValue: TValue; const APropertyName: string;
   const ASerializerObject: TObject; const AAttributes: TArray<TCustomAttribute>);
+var
+  lGuid: TGUID;
 begin
-  (ASerializerObject as TJDOJsonObject).S[APropertyName] := AElementValue.AsType<TGUID>.ToString;
+  lGuid := AElementValue.AsType<TGUID>;
+  if TMVCSerializerHelper.AttributeExists<MVCSerializeGuidWithoutBracesAttribute>(AAttributes) then
+    (ASerializerObject as TJDOJsonObject).S[APropertyName] := TMVCGuidHelper.GUIDToStringEx(lGuid)
+  else
+    (ASerializerObject as TJDOJsonObject).S[APropertyName] := lGuid.ToString;
 end;
 
 procedure TMVCGUIDSerializer.SerializeRoot(const AObject: TObject; out ASerializerObject: TObject;

@@ -67,7 +67,9 @@ type
     procedure OnBeforeRouting(AContext: TWebContext; var AHandled: Boolean);
     procedure OnBeforeControllerAction(AContext: TWebContext; const AControllerQualifiedClassName: string;
       const AActionName: string; var AHandled: Boolean);
-    procedure OnAfterControllerAction(AContext: TWebContext; const AActionName: string; const AHandled: Boolean);
+    procedure OnAfterControllerAction(AContext: TWebContext;
+      const AControllerQualifiedClassName: string; const AActionName: string;
+      const AHandled: Boolean);
     procedure OnAfterRouting(AContext: TWebContext; const AHandled: Boolean);
   end;
 
@@ -161,8 +163,13 @@ begin
           end;
           if lAttr is MVCPathAttribute then
           begin
-            lControllerPath := MVCPathAttribute(lAttr).Path;
-            lPathAttributeFound := fPathFilter.IsEmpty or lControllerPath.StartsWith(fPathFilter);
+            if not lPathAttributeFound then
+            begin
+              {in case of more than one MVCPath attribute, only the firstone
+              is considered by swagger}
+              lControllerPath := MVCPathAttribute(lAttr).Path;
+              lPathAttributeFound := fPathFilter.IsEmpty or lControllerPath.StartsWith(fPathFilter);
+            end;
           end;
           if lAttr is MVCSWAGDefaultModel then
           begin
@@ -400,8 +407,9 @@ begin
   end;
 end;
 
-procedure TMVCSwaggerMiddleware.OnAfterControllerAction(AContext: TWebContext; const AActionName: string;
-  const AHandled: Boolean);
+procedure TMVCSwaggerMiddleware.OnAfterControllerAction(AContext: TWebContext;
+      const AControllerQualifiedClassName: string; const AActionName: string;
+      const AHandled: Boolean);
 begin
   // do nothing
 end;

@@ -233,6 +233,12 @@ type
     [MVCPath('/arrays')]
     procedure GetClassWithArrays;
 
+    //Records
+    [MVCHTTPMethod([httpGET])]
+    [MVCPath('/record')]
+    procedure GetSingleRecord;
+
+
     // Enums
     [MVCHTTPMethod([httpGET])]
     [MVCPath('/enums')]
@@ -436,7 +442,7 @@ var
 begin
   lObj := TClassWithEnums.Create;
   lObj.RGBSet := [ctGreen, ctBlue];
-  lObj.EnumSimple := ctGreen;
+  lObj.EnumDefaultSerialization := ctGreen;
   lObj.EnumWithName := ctGreen;
   lObj.EnumWithOrdValue := ctGreen;
   lObj.EnumWithMappedValues := ctGreen;
@@ -826,6 +832,14 @@ end;
 procedure TRenderSampleController.GetSimpleLists;
 begin
   Render(TSimpleListTest.Create);
+end;
+
+procedure TRenderSampleController.GetSingleRecord;
+var
+  lSR: TSimpleRecord;
+begin
+  lSR := TSimpleRecord.Create;
+  Render<TSimpleRecord>(200, lSR);
 end;
 
 procedure TRenderSampleController.GetPeopleAsCSV;
